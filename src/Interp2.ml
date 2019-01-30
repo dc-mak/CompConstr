@@ -55,8 +55,16 @@ type value =
   | Bool of bool
 ;;
 
+type env =
+  (string * int) list
+;;
+
 let lookup env var =
   Int (List.Assoc.find_exn env ~equal:String.(=) var)
+;;
+
+type stack =
+  value list
 ;;
 
 exception Malformed_stack
@@ -135,6 +143,6 @@ let rec interp (env, stack) = function
 
 ;;
 
-let eval =
-  Fn.compose (interp ([], [])) compile_statement
+let eval statement =
+  interp ([], []) (compile_statement statement)
 ;;

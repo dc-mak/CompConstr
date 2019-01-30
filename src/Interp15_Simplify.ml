@@ -11,6 +11,10 @@ let dummy =
   Int 0
 ;;
 
+type env =
+  (string * int) list
+;;
+
 let lookup env var =
   Int (List.Assoc.find_exn env ~equal:String.(=) var)
 ;;
@@ -28,7 +32,7 @@ type cont =
   | Bool_op_with of bool_op * int
   | Compile_then_bool_op of bool_op * arith_exp
   (* returns to eval_statement *)
-  | Compile_then_update_env of string
+  | Update_env_then of string
 
   (* bool_cont *)
   | Not
@@ -72,7 +76,7 @@ let rec interp (env, value) = function
   | Compile_then_plus arith :: rest -> compile_arith (env, arith) (Plus_with (get_int value) :: rest)
   | Compile_then_times arith :: rest -> compile_arith (env, arith) (Times_with (get_int value) :: rest)
   | Compile_then_bool_op (op, arith) :: rest -> compile_arith (env, arith) (Bool_op_with (op, (get_int value)) :: rest)
-  | Compile_then_update_env var :: rest -> interp ((var, get_int value) :: env, dummy) rest
+  | Update_env_then var :: rest -> interp ((var, get_int value) :: env, dummy) rest
 
   (* get_bool value *)
   | Not :: rest -> interp (env, Bool (not @@ get_bool value)) rest
@@ -103,9 +107,12 @@ and compile_bool (env, bool_exp) rest =
 and compile_statement (env, statement) rest =
   match statement with
   | Skip -> interp (env, dummy) rest
-  | Assign (var, arith_exp) -> compile_arith (env, arith_exp) (Compile_then_update_env var :: rest)
+  | Assign (var, arith_exp) -> compile_arith (env, arith_exp) (Update_env_then var :: rest)
   | Seq (first, second) -> compile_statement (env, first) (Compile_then second :: rest)
   | If (cond, true_, false_) -> compile_bool (env, cond) (Branch (true_, false_) :: rest)
   | While (cond, body) as loop -> compile_bool (env, cond) (Loop (body, loop) :: rest)
 ;;
 
+let eval statement =
+  compile_statement ([], statement) []
+;;

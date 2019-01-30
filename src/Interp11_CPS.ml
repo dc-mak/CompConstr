@@ -66,6 +66,8 @@ let rec eval_statement (env, statement) return =
       eval_statement (cond_env, if cond_bool then Seq (body, loop) else Skip) return)
 ;;
 
-let eval_statement statement =
-  eval_statement statement (fun x -> x)
+let eval statement =
+  eval_statement
+    ((fun x -> failwith @@ "Not found: " ^ x), statement)
+    (fun x -> x)
 ;;
