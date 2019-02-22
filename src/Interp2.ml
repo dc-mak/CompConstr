@@ -16,6 +16,16 @@ type instr =
   | Assign of string
   | If of instr list * instr list
   | While of instr list * instr list
+  | Pop_env
+  | Pop_stack
+  | Push_closure of compiled_closure
+  | Call
+
+and compiled_closure = {
+  arg : string;
+  body : instr list;
+  return : instr list;
+}
 ;;
 
 let rec compile_arith = function
@@ -40,12 +50,24 @@ let rec compile_bool = function
 
 let rec compile_statement = function
   | Skip ->  []
-  | Assign (var, exp) ->
+  | Assign (var, (First (None, exp))) ->
     compile_arith exp @ [Assign var]
+
+  | Assign (var, (First (Some func, exp))) ->
+    compile_arith exp @ [ Lookup func; Call; Pop_env; Assign var ]
+
+  | Assign (var, Second { arg; body; return } ) ->
+    [Push_closure { arg; body = compile_statement body; return = compile_arith return }; Assign var ]
+
+  | Call (func, exp) ->
+    compile_arith exp @ [ Lookup func; Call; Pop_env; Pop_stack (* no assign *)]
+
   | Seq (first, second) ->
     compile_statement first @ compile_statement second
+
   | If (cond, true_, false_) ->
     compile_bool cond @ [If (compile_statement true_, compile_statement false_)]
+
   | While (cond, body) ->
     [While (compile_bool cond, compile_statement body)]
 ;;
@@ -53,14 +75,17 @@ let rec compile_statement = function
 type value =
   | Int of int
   | Bool of bool
+  | Closure of compiled_closure
 ;;
 
 type env =
-  (string * int) list
+  (string * (int, compiled_closure) Either.t) list
 ;;
 
 let lookup env var =
-  Int (List.Assoc.find_exn env ~equal:String.(=) var)
+  match List.Assoc.find_exn env ~equal:String.(=) var with
+  | Either.First int -> Int int
+  | Second closure -> Closure closure
 ;;
 
 type stack =
@@ -88,6 +113,11 @@ let one_int = function
 let two_ints = function
   | Int a :: Int b :: stack -> (a, b, stack)
   | _ ->  raise Malformed_stack
+;;
+
+let closure_and_int = function
+  | Closure closure  :: Int int :: stack -> (closure, int, stack)
+  | _ -> raise Malformed_stack
 ;;
 
 let rec interp (env, stack) = function
@@ -132,7 +162,7 @@ let rec interp (env, stack) = function
 
   | Assign var :: rest ->
     let (a, stack) = one_int stack in
-    interp ((var, a) :: env, stack) rest
+    interp ((var, First a) :: env, stack) rest
 
   | If (true_, false_) :: rest ->
     let (a, stack) = one_bool stack in
@@ -140,6 +170,19 @@ let rec interp (env, stack) = function
 
   | While (cond, body) as loop :: rest ->
     interp (env, stack) (cond @ [If (body @ [loop], [])] @ rest)
+
+  | Push_closure closure :: rest ->
+    interp (env, (Closure closure) :: stack) rest
+
+  | Call :: rest ->
+    let ({arg; body; return}, int, stack) = closure_and_int stack in
+    interp ((arg, First int) :: env, stack ) (body @ return @ rest)
+
+  | Pop_stack :: rest ->
+    interp (env, List.tl_exn stack) rest
+
+  | Pop_env :: rest ->
+    interp (List.tl_exn env, stack) rest
 
 ;;
 

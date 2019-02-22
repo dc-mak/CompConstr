@@ -20,11 +20,16 @@ type bool_exp =
   | Bool_op of arith_exp * bool_op * arith_exp
 ;;
 
-type statement =
+type closure = {
+  arg : string;
+  body : statement;
+  return : arith_exp;
+}
+and statement =
   | Skip
-  | Assign of string * arith_exp
+  | Assign of string * ( string option * arith_exp, closure ) Either.t
   | Seq of statement * statement
   | If of bool_exp * statement * statement
   | While of bool_exp * statement
+  | Call of string * arith_exp
 ;;
-
